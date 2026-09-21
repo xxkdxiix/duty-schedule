@@ -1,11 +1,13 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" style="color-scheme: dark;"><head>
+<html lang="en"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Duty Schedule</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
 <style>
   :root {
     --bg: #FAF6EF;
@@ -436,57 +438,76 @@
   var hasUnsaved = false;
 
   /* ------------------------------------------------------------------
-     STORAGE ADAPTER  —  this is the only part you need to change.
+     STORAGE ADAPTER — Firebase Realtime Database.
 
-     As shipped, it uses localStorage: the schedule is saved in each
-     browser separately. That is fine for testing, but it does NOT
-     share the schedule between Frodhel and Febe/Sani on different
-     devices — each one would see their own copy.
+     1. In the Firebase console: Build > Realtime Database > Create
+        Database. Start in "locked mode", then set the Rules to:
 
-     For a real shared schedule you need somewhere on your server to
-     keep the data. Replace the two functions below with fetch calls
-     to your own endpoint, e.g.:
+          {
+            "rules": {
+              "schedule": {
+                ".read": true,
+                ".write": true
+              }
+            }
+          }
 
-       var Storage = {
-         load: function () {
-           return fetch("/api/schedule").then(function (r) { return r.json(); });
-         },
-         save: function (state) {
-           return fetch("/api/schedule", {
-             method: "POST",
-             headers: { "Content-Type": "application/json" },
-             body: JSON.stringify(state)
-           }).then(function (r) {
-             if (!r.ok) throw new Error("save failed");
-           });
-         }
-       };
+        (This makes the schedule readable/writable by anyone with the
+        page URL — fine for a small private team tool, but note there
+        is no login, so don't put anything sensitive in here.)
 
-     The endpoint just has to store one JSON blob and hand it back.
-     Any backend works — PHP, Node, Firebase, Supabase, a Google Sheet
-     behind Apps Script, etc.
+     2. In the Firebase console: Project settings (gear icon) >
+        General > Your apps > add a Web app (</> icon) if you don't
+        have one yet. Copy the "firebaseConfig" object it gives you
+        and paste it in place of the placeholder below.
   ------------------------------------------------------------------ */
-  var STORAGE_KEY = "duty-schedule-state";
+  var firebaseConfig = {
+    apiKey: "AIzaSyAxWDC7NfZjgqzUhJWRTbDd3Lie6oLIHKs",
+    authDomain: "xxkdxiix-dhelzkiz.firebaseapp.com",
+    databaseURL: "https://xxkdxiix-dhelzkiz-default-rtdb.firebaseio.com",
+    projectId: "xxkdxiix-dhelzkiz",
+    storageBucket: "xxkdxiix-dhelzkiz.firebasestorage.app",
+    messagingSenderId: "930168321435",
+    appId: "1:930168321435:web:2226a1680920d374d31d3e",
+    measurementId: "G-VGHVKVF9B7"
+  };
+
+  var db = null;
+  var firebaseReady = false;
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    firebaseReady = true;
+  } catch (e) {
+    console.error("Firebase failed to initialize — check firebaseConfig.", e);
+  }
+
   var Storage = {
     load: function () {
-      return new Promise(function (resolve) {
-        var raw = null;
-        try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) {}
-        if (!raw) { resolve(null); return; }
-        try { resolve(JSON.parse(raw)); } catch (e) { resolve(null); }
+      if (!firebaseReady) return Promise.resolve(null);
+      return db.ref("schedule").once("value").then(function (snap) {
+        return snap.val();
       });
     },
     save: function (state) {
-      return new Promise(function (resolve, reject) {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-          resolve();
-        } catch (e) {
-          reject(e);
-        }
-      });
+      if (!firebaseReady) return Promise.reject(new Error("Firebase not configured"));
+      return db.ref("schedule").set(state);
     }
   };
+
+  // Live sync: when the other operator saves, refresh this view automatically
+  // (only if you don't have unsaved local taps of your own — those are never
+  // overwritten silently).
+  if (firebaseReady) {
+    db.ref("schedule").on("value", function (snap) {
+      var remote = snap.val();
+      if (!remote || !remote.days || !remote.gatherings) return;
+      if (hasUnsaved) return;
+      savedState = remote;
+      workingState = deepCopy(savedState);
+      if (currentOperator) render();
+    });
+  }
 
   function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
   function otherOp(opKey) { return opKey === "frodhel" ? "febe" : "frodhel"; }
