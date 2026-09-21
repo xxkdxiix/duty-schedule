@@ -484,13 +484,26 @@
 
   var Storage = {
     load: function () {
-      if (!firebaseReady) return Promise.resolve(null);
+      if (!firebaseReady) {
+        return Promise.reject(new Error("Firebase did not initialize. Check the Firebase configuration."));
+      }
+
       return db.ref("schedule").once("value").then(function (snap) {
-        return snap.val();
+        var value = snap.val();
+
+        if (!value || !value.days || !value.gatherings) {
+          return null;
+        }
+
+        return value;
       });
     },
+
     save: function (state) {
-      if (!firebaseReady) return Promise.reject(new Error("Firebase not configured"));
+      if (!firebaseReady) {
+        return Promise.reject(new Error("Firebase did not initialize. Check the Firebase configuration."));
+      }
+
       return db.ref("schedule").set(state);
     }
   };
@@ -503,9 +516,17 @@
       var remote = snap.val();
       if (!remote || !remote.days || !remote.gatherings) return;
       if (hasUnsaved) return;
+
       savedState = remote;
       workingState = deepCopy(savedState);
-      if (currentOperator) render();
+
+      if (currentOperator) {
+        render();
+      }
+    }, function (err) {
+      console.error("Firebase live-sync failed:", err);
+      document.getElementById("save-status-text").textContent =
+        "Firebase read failed";
     });
   }
 
@@ -775,15 +796,27 @@
   });
 
   document.getElementById("save-btn").addEventListener("click", function () {
-    savedState = deepCopy(workingState);
-    stateEl.textContent = JSON.stringify(savedState);
-    setUnsaved(false);
+    var stateToSave = deepCopy(workingState);
     var textEl = document.getElementById("save-status-text");
+    var saveBtn = document.getElementById("save-btn");
+
+    saveBtn.disabled = true;
     textEl.textContent = "Saving\u2026";
-    Storage.save(savedState).then(function () {
-      textEl.textContent = "Saved";
-    }).catch(function () {
-      textEl.textContent = "Save failed — check your connection and try again";
+
+    Storage.save(stateToSave).then(function () {
+      savedState = deepCopy(stateToSave);
+      workingState = deepCopy(savedState);
+      stateEl.textContent = JSON.stringify(savedState);
+      setUnsaved(false);
+      textEl.textContent = "Saved to Firebase";
+    }).catch(function (err) {
+      console.error("Firebase save failed:", err);
+      setUnsaved(true);
+      textEl.textContent = "Save failed — Firebase did not accept the change";
+      alert("The schedule could not be saved to Firebase.\n\n" +
+            (err && err.message ? err.message : "Check your Firebase Realtime Database Rules and internet connection."));
+    }).finally(function () {
+      saveBtn.disabled = false;
     });
   });
 
@@ -809,19 +842,33 @@
     document.getElementById("screen-select").hidden = false;
   });
 
-  // Load whatever the storage layer has, then restore the remembered operator.
+  // Load the shared schedule from Firebase before opening the board.
+  // If Firebase cannot be read, do NOT silently use the embedded default:
+  // that would make another device appear to have "reset" the schedule.
   Storage.load().then(function (loaded) {
-    if (loaded && loaded.days && loaded.gatherings) {
+    if (loaded) {
       savedState = loaded;
       workingState = deepCopy(savedState);
     }
+
     var remembered = null;
     try { remembered = localStorage.getItem(LS_KEY); } catch (e) {}
-    if (remembered && OPERATORS[remembered]) selectOperator(remembered);
-  }).catch(function () {
-    var remembered = null;
-    try { remembered = localStorage.getItem(LS_KEY); } catch (e) {}
-    if (remembered && OPERATORS[remembered]) selectOperator(remembered);
+
+    if (remembered && OPERATORS[remembered]) {
+      selectOperator(remembered);
+    } else {
+      document.getElementById("save-status-text").textContent =
+        loaded ? "Connected to Firebase" : "Firebase connected — no saved schedule yet";
+    }
+  }).catch(function (err) {
+    console.error("Firebase load failed:", err);
+
+    var textEl = document.getElementById("save-status-text");
+    textEl.textContent = "Firebase connection failed";
+
+    alert("The shared schedule could not be loaded from Firebase.\n\n" +
+          (err && err.message ? err.message :
+           "Check your Firebase Realtime Database Rules and internet connection."));
   });
 })();
 </script>
