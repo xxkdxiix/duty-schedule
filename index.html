@@ -323,7 +323,7 @@
 <div class="wrap">
 
   <!-- Screen 1: operator identification -->
-  <section class="select-screen" id="screen-select" hidden="">
+  <section class="select-screen" id="screen-select">
     <p class="eyebrow">Duty roster</p>
     <h1>Who's checking in?</h1>
     <p class="sub">Pick your name to view and update the week. The saved schedule carries over for the other operator to see.</p>
@@ -342,7 +342,7 @@
   </section>
 
   <!-- Screen 2: board -->
-  <section id="screen-board">
+  <section id="screen-board" hidden>
     <div class="whoami">
       <span class="id"><span class="swatch-dot" id="whoami-dot" style="background: var(--teal);"></span>Checked in as <strong id="whoami-name">Febe / Sani</strong></span>
       <button class="link-btn" id="switch-op-btn" type="button">Switch operator</button>
@@ -409,7 +409,7 @@
 
 </div>
 
-<script id="state-data" type="application/json">{"days":{"mon":{"morning":null,"evening":null},"tue":{"morning":null,"evening":null},"wed":{"morning":null,"evening":null},"thu":{"morning":null,"evening":null},"fri":{"morning":null,"evening":null}},"gatherings":{"prayer":null,"worship":null}}</script>
+<script id="state-data" type="application/json">{"days":{"mon":{"morning":"frodhel","evening":"frodhel"},"tue":{"morning":"frodhel","evening":"frodhel"},"wed":{"morning":"febe","evening":"febe"},"thu":{"morning":"febe","evening":"febe"},"fri":{"morning":"febe","evening":"febe"}},"gatherings":{"prayer":null,"worship":null}}</script>
 
 <script>
 (function () {
@@ -484,26 +484,13 @@
 
   var Storage = {
     load: function () {
-      if (!firebaseReady) {
-        return Promise.reject(new Error("Firebase did not initialize. Check the Firebase configuration."));
-      }
-
+      if (!firebaseReady) return Promise.resolve(null);
       return db.ref("schedule").once("value").then(function (snap) {
-        var value = snap.val();
-
-        if (!value || !value.days || !value.gatherings) {
-          return null;
-        }
-
-        return value;
+        return snap.val();
       });
     },
-
     save: function (state) {
-      if (!firebaseReady) {
-        return Promise.reject(new Error("Firebase did not initialize. Check the Firebase configuration."));
-      }
-
+      if (!firebaseReady) return Promise.reject(new Error("Firebase not configured"));
       return db.ref("schedule").set(state);
     }
   };
@@ -516,17 +503,9 @@
       var remote = snap.val();
       if (!remote || !remote.days || !remote.gatherings) return;
       if (hasUnsaved) return;
-
       savedState = remote;
       workingState = deepCopy(savedState);
-
-      if (currentOperator) {
-        render();
-      }
-    }, function (err) {
-      console.error("Firebase live-sync failed:", err);
-      document.getElementById("save-status-text").textContent =
-        "Firebase read failed";
+      if (currentOperator) render();
     });
   }
 
@@ -796,27 +775,15 @@
   });
 
   document.getElementById("save-btn").addEventListener("click", function () {
-    var stateToSave = deepCopy(workingState);
+    savedState = deepCopy(workingState);
+    stateEl.textContent = JSON.stringify(savedState);
+    setUnsaved(false);
     var textEl = document.getElementById("save-status-text");
-    var saveBtn = document.getElementById("save-btn");
-
-    saveBtn.disabled = true;
     textEl.textContent = "Saving\u2026";
-
-    Storage.save(stateToSave).then(function () {
-      savedState = deepCopy(stateToSave);
-      workingState = deepCopy(savedState);
-      stateEl.textContent = JSON.stringify(savedState);
-      setUnsaved(false);
-      textEl.textContent = "Saved to Firebase";
-    }).catch(function (err) {
-      console.error("Firebase save failed:", err);
-      setUnsaved(true);
-      textEl.textContent = "Save failed — Firebase did not accept the change";
-      alert("The schedule could not be saved to Firebase.\n\n" +
-            (err && err.message ? err.message : "Check your Firebase Realtime Database Rules and internet connection."));
-    }).finally(function () {
-      saveBtn.disabled = false;
+    Storage.save(savedState).then(function () {
+      textEl.textContent = "Saved";
+    }).catch(function () {
+      textEl.textContent = "Save failed — check your connection and try again";
     });
   });
 
@@ -842,36 +809,19 @@
     document.getElementById("screen-select").hidden = false;
   });
 
-  // Firebase is the source of truth for the shared schedule.
-  // A Firebase value of null means the shared schedule is intentionally empty.
+  // Load whatever the storage layer has, then restore the remembered operator.
   Storage.load().then(function (loaded) {
-    if (loaded === null) {
-      savedState = deepCopy(JSON.parse(stateEl.textContent));
-      workingState = deepCopy(savedState);
-    } else {
+    if (loaded && loaded.days && loaded.gatherings) {
       savedState = loaded;
       workingState = deepCopy(savedState);
     }
-
     var remembered = null;
     try { remembered = localStorage.getItem(LS_KEY); } catch (e) {}
-
-    if (remembered && OPERATORS[remembered]) {
-      selectOperator(remembered);
-    } else {
-      document.getElementById("save-status-text").textContent =
-        loaded === null ? "Firebase connected — schedule is empty" :
-        "Connected to Firebase";
-    }
-  }).catch(function (err) {
-    console.error("Firebase load failed:", err);
-
-    var textEl = document.getElementById("save-status-text");
-    textEl.textContent = "Firebase connection failed";
-
-    alert("The shared schedule could not be loaded from Firebase.\n\n" +
-          (err && err.message ? err.message :
-           "Check your Firebase Realtime Database Rules and internet connection."));
+    if (remembered && OPERATORS[remembered]) selectOperator(remembered);
+  }).catch(function () {
+    var remembered = null;
+    try { remembered = localStorage.getItem(LS_KEY); } catch (e) {}
+    if (remembered && OPERATORS[remembered]) selectOperator(remembered);
   });
 })();
 </script>
