@@ -495,21 +495,57 @@
     }
   };
 
+  function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
+
+  // Firebase drops any key whose value is null (and drops a whole object if
+  // every field inside it is null). So a loaded record can be missing entire
+  // days or the whole "gatherings" section just because they were empty.
+  // This rebuilds a complete, correctly-shaped state from whatever partial
+  // data actually came back.
+  function emptyState() {
+    return {
+      days: {
+        mon: { morning: null, evening: null },
+        tue: { morning: null, evening: null },
+        wed: { morning: null, evening: null },
+        thu: { morning: null, evening: null },
+        fri: { morning: null, evening: null }
+      },
+      gatherings: { prayer: null, worship: null }
+    };
+  }
+
+  function normalizeState(raw) {
+    var base = emptyState();
+    if (raw && raw.days) {
+      Object.keys(base.days).forEach(function (k) {
+        if (raw.days[k]) {
+          base.days[k].morning = raw.days[k].morning || null;
+          base.days[k].evening = raw.days[k].evening || null;
+        }
+      });
+    }
+    if (raw && raw.gatherings) {
+      Object.keys(base.gatherings).forEach(function (k) {
+        if (raw.gatherings[k]) base.gatherings[k] = raw.gatherings[k];
+      });
+    }
+    return base;
+  }
+
   // Live sync: when the other operator saves, refresh this view automatically
   // (only if you don't have unsaved local taps of your own — those are never
   // overwritten silently).
   if (firebaseReady) {
     db.ref("schedule").on("value", function (snap) {
       var remote = snap.val();
-      if (!remote || !remote.days || !remote.gatherings) return;
+      if (!remote) return;
       if (hasUnsaved) return;
-      savedState = remote;
+      savedState = normalizeState(remote);
       workingState = deepCopy(savedState);
       if (currentOperator) render();
     });
   }
-
-  function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
   function otherOp(opKey) { return opKey === "frodhel" ? "febe" : "frodhel"; }
 
   function countsFor(opKey) {
@@ -811,8 +847,8 @@
 
   // Load whatever the storage layer has, then restore the remembered operator.
   Storage.load().then(function (loaded) {
-    if (loaded && loaded.days && loaded.gatherings) {
-      savedState = loaded;
+    if (loaded) {
+      savedState = normalizeState(loaded);
       workingState = deepCopy(savedState);
     }
     var remembered = null;
