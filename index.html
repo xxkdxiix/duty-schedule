@@ -409,7 +409,7 @@
 
 </div>
 
-<script id="state-data" type="application/json">{"days":{"mon":{"morning":"frodhel","evening":"frodhel"},"tue":{"morning":"frodhel","evening":"frodhel"},"wed":{"morning":"febe","evening":"febe"},"thu":{"morning":"febe","evening":"febe"},"fri":{"morning":"febe","evening":"febe"}},"gatherings":{"prayer":null,"worship":null}}</script>
+<script id="state-data" type="application/json">{"days":{"mon":{"morning":null,"evening":null},"tue":{"morning":null,"evening":null},"wed":{"morning":null,"evening":null},"thu":{"morning":null,"evening":null},"fri":{"morning":null,"evening":null}},"gatherings":{"prayer":null,"worship":null}}</script>
 
 <script>
 (function () {
@@ -842,11 +842,13 @@
     document.getElementById("screen-select").hidden = false;
   });
 
-  // Load the shared schedule from Firebase before opening the board.
-  // If Firebase cannot be read, do NOT silently use the embedded default:
-  // that would make another device appear to have "reset" the schedule.
+  // Firebase is the source of truth for the shared schedule.
+  // A Firebase value of null means the shared schedule is intentionally empty.
   Storage.load().then(function (loaded) {
-    if (loaded) {
+    if (loaded === null) {
+      savedState = deepCopy(JSON.parse(stateEl.textContent));
+      workingState = deepCopy(savedState);
+    } else {
       savedState = loaded;
       workingState = deepCopy(savedState);
     }
@@ -858,7 +860,8 @@
       selectOperator(remembered);
     } else {
       document.getElementById("save-status-text").textContent =
-        loaded ? "Connected to Firebase" : "Firebase connected — no saved schedule yet";
+        loaded === null ? "Firebase connected — schedule is empty" :
+        "Connected to Firebase";
     }
   }).catch(function (err) {
     console.error("Firebase load failed:", err);
