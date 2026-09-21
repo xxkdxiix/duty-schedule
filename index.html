@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Duty Schedule</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
+<style>
+  :root {
+    --bg: #FAF6EF;
+    --panel: #FFFFFF;
+    --panel-alt: #F1EADD;
+    --ink: #23272B;
+    --ink-soft: #6B665D;
+    --line: #DED4C2;
+    --gold: #B9791E;
+    --gold-bg: #F3E2C0;
+    --gold-strong: #8F5B12;
+    --teal: #2C6E6B;
+    --teal-bg: #D7E9E6;
+    --teal-strong: #1F4F4D;
+    --danger: #A8402F;
+    --danger-bg: #F4DFD9;
+    --ok: #3E7A4D;
+    --ok-bg: #DEEDE0;
+    --lock: #5C6FA8;
+    --lock-bg: #E3E7F3;
+    --plum: #7A4F7C;
+    --plum-bg: #ECE0EC;
+    --radius: 10px;
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #191714;
+      --panel: #24211D;
+      --panel-alt: #2C2822;
+      --ink: #EFE9DD;
+      --ink-soft: #B3AA9A;
+      --line: #3B362E;
+      --gold: #E0A63F;
+      --gold-bg: #4A3813;
+      --gold-strong: #F0C878;
+      --teal: #5FB0AB;
+      --teal-bg: #1C3B39;
+      --teal-strong: #8FD4CE;
+      --danger: #E38875;
+      --danger-bg: #4A2620;
+      --ok: #7FC090;
+      --ok-bg: #21392A;
+      --lock: #96A6E0;
+      --lock-bg: #262C46;
+      --plum: #C79BC9;
+      --plum-bg: #3A2B3B;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #191714;
+    --panel: #24211D;
+    --panel-alt: #2C2822;
+    --ink: #EFE9DD;
+    --ink-soft: #B3AA9A;
+    --line: #3B362E;
+    --gold: #E0A63F;
+    --gold-bg: #4A3813;
+    --gold-strong: #F0C878;
+    --teal: #5FB0AB;
+    --teal-bg: #1C3B39;
+    --teal-strong: #8FD4CE;
+    --danger: #E38875;
+    --danger-bg: #4A2620;
+    --ok: #7FC090;
+    --ok-bg: #21392A;
+    --lock: #96A6E0;
+    --lock-bg: #262C46;
+    --plum: #C79BC9;
+    --plum-bg: #3A2B3B;
+  }
+
+  html, body { height: 100%; }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 940px; margin: 0 auto; padding: 32px 20px 64px; }
+  [hidden] { display: none !important; }
+
+  /* ---- Operator select screen ---- */
+  .select-screen {
+    min-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px 16px;
+  }
+  .select-screen .eyebrow { font-size: 13px; color: var(--ink-soft); margin: 0 0 10px; }
+  .select-screen h1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(26px, 5vw, 34px);
+    margin: 0 0 6px;
+  }
+  .select-screen p.sub { color: var(--ink-soft); font-size: 14.5px; max-width: 46ch; margin: 0 0 32px; }
+  .op-choices { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; width: 100%; max-width: 480px; }
+  button.op-choice {
+    all: unset;
+    cursor: pointer;
+    flex: 1;
+    min-width: 180px;
+    background: var(--panel);
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+    padding: 24px 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    transition: transform 120ms ease, border-color 120ms ease;
+  }
+  button.op-choice:hover { transform: translateY(-2px); }
+  button.op-choice:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  button.op-choice .badge {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 600; font-size: 17px;
+    color: #fff;
+  }
+  button.op-choice.frodhel .badge { background: var(--gold); }
+  button.op-choice.febe .badge { background: var(--teal); }
+  button.op-choice.frodhel:hover { border-color: var(--gold); }
+  button.op-choice.febe:hover { border-color: var(--teal); }
+  button.op-choice .op-label { font-size: 12px; color: var(--ink-soft); }
+  button.op-choice .op-title { font-family: var(--font-display); font-size: 19px; font-weight: 600; }
+
+  /* ---- Board screen ---- */
+  header.top { margin-bottom: 24px; }
+  .whoami { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .whoami .id { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink-soft); }
+  .whoami .swatch-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .whoami .id strong { color: var(--ink); }
+  button.link-btn { all: unset; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink-soft); text-decoration: underline; text-underline-offset: 2px; }
+  button.link-btn:hover { color: var(--ink); }
+
+  header.top .eyebrow { font-size: 13px; color: var(--ink-soft); margin: 0 0 6px; }
+  h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(28px, 5vw, 38px); margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2.section-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 22px;
+    margin: 0 0 6px;
+  }
+  header.top p.sub { margin: 0; color: var(--ink-soft); font-size: 15px; max-width: 64ch; }
+  p.section-sub { margin: 0 0 16px; color: var(--ink-soft); font-size: 14px; max-width: 64ch; }
+
+  .hours { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  .hours .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+  .hours .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot.morning { background: #E4B04A; }
+  .dot.evening { background: #5C6FA8; }
+  .dot.gather { background: var(--plum); }
+  .dot.both { background: linear-gradient(90deg, var(--gold) 50%, var(--teal) 50%); }
+
+  .rule-note { background: var(--lock-bg); color: var(--lock); border-radius: 10px; padding: 12px 14px; font-size: 13.5px; margin-top: 16px; line-height: 1.5; }
+  .rule-note.plum { background: var(--plum-bg); color: var(--plum); }
+
+  .board { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 22px; overflow-x: auto; }
+  .grid { display: grid; grid-template-columns: 92px repeat(5, minmax(88px, 1fr)); gap: 8px; min-width: 580px; }
+  .grid .head-cell { font-size: 12.5px; color: var(--ink-soft); font-weight: 600; text-align: center; padding: 4px 0 10px; border-bottom: 1px solid var(--line); }
+  .grid .head-cell.corner { border-bottom: none; }
+  .row-label { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 6px 4px; }
+  .row-label .name { font-weight: 600; font-size: 14px; }
+  .row-label .time { font-size: 11.5px; color: var(--ink-soft); }
+
+  button.cell {
+    all: unset;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 58px;
+    border-radius: var(--radius);
+    border: 1.5px dashed var(--line);
+    font-family: var(--font-ui);
+    font-weight: 600;
+    font-size: 13px;
+    text-align: center;
+    padding: 6px 4px;
+    transition: transform 120ms ease, border-color 120ms ease, opacity 120ms ease;
+    color: var(--ink-soft);
+  }
+  button.cell:hover { transform: translateY(-1px); }
+  button.cell:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  button.cell.empty::after { content: "+"; font-size: 17px; font-weight: 400; }
+  button.cell.op-frodhel { border-style: solid; border-color: var(--gold); background: var(--gold-bg); color: var(--gold-strong); }
+  button.cell.op-febe { border-style: solid; border-color: var(--teal); background: var(--teal-bg); color: var(--teal-strong); }
+  button.cell.mine { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px currentColor; }
+  button.cell.not-mine { cursor: default; opacity: 0.72; }
+  button.cell.not-mine:hover { transform: none; }
+  button.cell.ineligible { cursor: not-allowed; opacity: 0.55; }
+  button.cell.ineligible:hover { transform: none; }
+
+  @media (prefers-reduced-motion: reduce) { button.cell, button.op-choice { transition: none; } }
+
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  @media (max-width: 560px) { .panels { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .panel.is-me { border-color: currentColor; }
+  .panel .op-name { font-family: var(--font-display); font-size: 18px; font-weight: 600; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  .panel .op-name .you-tag { font-family: var(--font-ui); font-size: 11px; font-weight: 700; color: var(--ink-soft); background: var(--panel-alt); border-radius: 999px; padding: 2px 8px; letter-spacing: 0.03em; text-transform: uppercase; }
+  .panel .swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+  .swatch.frodhel { background: var(--gold); }
+  .swatch.febe { background: var(--teal); }
+
+  .counts { display: flex; gap: 10px; margin-bottom: 10px; }
+  .count-box { flex: 1; background: var(--panel-alt); border-radius: 8px; padding: 8px 10px; }
+  .count-box .k { font-size: 11.5px; color: var(--ink-soft); margin-bottom: 2px; }
+  .count-box .v { font-size: 19px; font-weight: 700; }
+  .count-box .cap { font-size: 11px; color: var(--ink-soft); }
+
+  .status-line { font-size: 13.5px; padding: 8px 10px; border-radius: 8px; display: flex; align-items: flex-start; gap: 7px; line-height: 1.35; }
+  .status-line.ok { background: var(--ok-bg); color: var(--ok); }
+  .status-line.warn { background: var(--danger-bg); color: var(--danger); }
+  .status-line.locked { background: var(--lock-bg); color: var(--lock); }
+  .status-line.plum { background: var(--plum-bg); color: var(--plum); }
+
+  .overall { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .overall .status-line { flex: 1; min-width: 220px; }
+
+  button.reset {
+    all: unset; cursor: pointer; font-family: var(--font-ui); font-weight: 600; font-size: 13px;
+    color: var(--ink-soft); border: 1px solid var(--line); padding: 9px 14px; border-radius: 8px; white-space: nowrap;
+  }
+  button.reset:hover { border-color: var(--danger); color: var(--danger); }
+  button.reset:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* Gatherings section */
+  .section-block { margin: 34px 0 22px; }
+  .gather-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+  .gather-row {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .gather-row .info { display: flex; flex-direction: column; gap: 2px; }
+  .gather-row .ev-title { font-family: var(--font-display); font-weight: 600; font-size: 16.5px; }
+  .gather-row .ev-time { font-size: 12.5px; color: var(--ink-soft); }
+  .gather-row .action { display: flex; align-items: center; gap: 10px; }
+  button.cell.gather-cell { min-width: 130px; min-height: 46px; }
+
+  .fixed-row {
+    background: var(--panel-alt);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .fixed-row .info { display: flex; flex-direction: column; gap: 2px; }
+  .fixed-row .ev-title { font-family: var(--font-display); font-weight: 600; font-size: 16.5px; }
+  .fixed-row .ev-time { font-size: 12.5px; color: var(--ink-soft); }
+  .both-badges { display: flex; gap: 6px; }
+  .both-badge {
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 5px 12px;
+    color: #fff;
+  }
+  .both-badge.frodhel { background: var(--gold-strong); }
+  .both-badge.febe { background: var(--teal-strong); }
+
+  .save-bar { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+  .save-bar .save-status { font-size: 13.5px; color: var(--ink-soft); display: flex; align-items: center; gap: 7px; }
+  .save-bar .save-status .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+  .save-bar .save-status.saved .pulse { background: var(--ok); }
+  .save-bar .save-actions { display: flex; gap: 10px; }
+  button.save-btn {
+    all: unset; cursor: pointer; font-family: var(--font-ui); font-weight: 700; font-size: 14px;
+    color: #fff; background: var(--gold-strong); padding: 10px 20px; border-radius: 8px;
+  }
+  button.save-btn:hover { filter: brightness(1.08); }
+  button.save-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  button.save-btn:disabled { opacity: 0.5; cursor: default; filter: none; }
+  button.discard-btn {
+    all: unset; cursor: pointer; font-family: var(--font-ui); font-weight: 600; font-size: 13px;
+    color: var(--ink-soft); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line);
+  }
+  button.discard-btn:hover { border-color: var(--danger); color: var(--danger); }
+  button.discard-btn:disabled { opacity: 0.4; cursor: default; }
+
+  .sync-note { font-size: 12px; color: var(--ink-soft); text-align: center; margin-top: 14px; }
+  .legend-hint { font-size: 12.5px; color: var(--ink-soft); margin: -8px 0 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Screen 1: operator identification -->
+  <section class="select-screen" id="screen-select" hidden="">
+    <p class="eyebrow">Duty roster</p>
+    <h1>Who's checking in?</h1>
+    <p class="sub">Pick your name to view and update the week. The saved schedule carries over for the other operator to see.</p>
+    <div class="op-choices">
+      <button class="op-choice frodhel" type="button" data-op="frodhel">
+        <span class="badge">F</span>
+        <span class="op-label">Operator 1</span>
+        <span class="op-title">Frodhel</span>
+      </button>
+      <button class="op-choice febe" type="button" data-op="febe">
+        <span class="badge">F/S</span>
+        <span class="op-label">Operator 2</span>
+        <span class="op-title">Febe / Sani</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- Screen 2: board -->
+  <section id="screen-board">
+    <div class="whoami">
+      <span class="id"><span class="swatch-dot" id="whoami-dot" style="background: var(--teal);"></span>Checked in as <strong id="whoami-name">Febe / Sani</strong></span>
+      <button class="link-btn" id="switch-op-btn" type="button">Switch operator</button>
+    </div>
+
+    <header class="top">
+      <h1>Duty Schedule</h1>
+      <p class="sub">Tap an empty box to take that day, or tap your own box to release it. The other operator's boxes are shown but locked to your view.</p>
+      <div class="hours">
+        <span class="chip"><span class="dot morning"></span>Morning · Mon–Fri · 6:00–9:00 AM</span>
+        <span class="chip"><span class="dot evening"></span>Evening · Mon–Fri · 9:00 PM–12:00 AM</span>
+      </div>
+      <p class="rule-note">Rule: to take 3 evening slots, you must first hold 3 morning slots. With fewer than 3 mornings — or none at all — you're capped at 2 evening slots.</p>
+    </header>
+
+    <div class="board">
+      <p class="legend-hint" id="legend-hint">Picks that would break the rule above are blocked automatically.</p>
+      <div class="grid" id="grid"><div class="head-cell corner"></div><div class="head-cell">Mon</div><div class="head-cell">Tue</div><div class="head-cell">Wed</div><div class="head-cell">Thu</div><div class="head-cell">Fri</div><div class="row-label"><span class="name">Morning</span><span class="time">6–9 AM</span></div><button type="button" class="cell op-frodhel not-mine" aria-label="Mon Morning: Frodhel.">Frodhel</button><button type="button" class="cell op-frodhel not-mine" aria-label="Tue Morning: Frodhel.">Frodhel</button><button type="button" class="cell op-febe mine" aria-label="Wed Morning: Febe / Sani.">Febe / Sani</button><button type="button" class="cell op-febe mine" aria-label="Thu Morning: Febe / Sani.">Febe / Sani</button><button type="button" class="cell op-febe mine" aria-label="Fri Morning: Febe / Sani.">Febe / Sani</button><div class="row-label"><span class="name">Evening</span><span class="time">9PM–12AM</span></div><button type="button" class="cell op-frodhel not-mine" aria-label="Mon Evening: Frodhel.">Frodhel</button><button type="button" class="cell op-frodhel not-mine" aria-label="Tue Evening: Frodhel.">Frodhel</button><button type="button" class="cell op-febe mine" aria-label="Wed Evening: Febe / Sani.">Febe / Sani</button><button type="button" class="cell op-febe mine" aria-label="Thu Evening: Febe / Sani.">Febe / Sani</button><button type="button" class="cell op-febe mine" aria-label="Fri Evening: Febe / Sani.">Febe / Sani</button></div>
+    </div>
+
+    <div class="panels" id="panels"><div class="panel" style="color: var(--gold);"><p class="op-name" style="color: var(--ink);"><span class="swatch frodhel"></span>Frodhel</p><div class="counts"><div class="count-box"><div class="k">Morning</div><div class="v">2 <span class="cap">/ 3</span></div></div><div class="count-box"><div class="k">Evening</div><div class="v">2 <span class="cap">/ 2</span></div></div></div><div class="status-line ok">2 morning / 2 evening — evening capped at 2 until 1 more morning day is picked.</div></div><div class="panel is-me" style="color: var(--teal);"><p class="op-name" style="color: var(--ink);"><span class="swatch febe"></span>Febe / Sani <span class="you-tag">You</span></p><div class="counts"><div class="count-box"><div class="k">Morning</div><div class="v">3 <span class="cap">/ 3</span></div></div><div class="count-box"><div class="k">Evening</div><div class="v">3 <span class="cap">/ 3</span></div></div></div><div class="status-line locked">3 morning / 3 evening — 3rd evening slot unlocked.</div></div></div>
+
+    <div class="overall" id="overall">
+      <div class="status-line ok" id="overall-status">Complete — all 5 mornings and 5 evenings are covered.</div>
+      <button class="reset" id="reset-btn" type="button">Clear my schedule</button>
+    </div>
+
+    <!-- Pagkakatipon -->
+    <div class="section-block">
+      <h2 class="section-title">Pagkakatipon</h2>
+      <p class="section-sub">One operator per gathering, and each operator may take at most one gathering total. Rule: whoever has fewer total duty slots (morning + evening) above gets first pick here.</p>
+      <div class="hours" style="margin-top:0; margin-bottom:14px;">
+        <span class="chip"><span class="dot gather"></span>Prayer Meeting · Wed · 3:30 AM</span>
+        <span class="chip"><span class="dot gather"></span>Worship Service · Sat · 3:30 AM</span>
+      </div>
+      <div class="gather-list" id="gather-list"><div class="gather-row"><div class="info"><span class="ev-title">Prayer Meeting</span><span class="ev-time">Wednesday · 3:30 AM</span></div><div class="action"><button type="button" class="cell gather-cell empty ineligible" aria-label="Prayer Meeting: empty.">Not yet</button></div></div><div class="gather-row"><div class="info"><span class="ev-title">Worship Service</span><span class="ev-time">Saturday · 3:30 AM</span></div><div class="action"><button type="button" class="cell gather-cell empty ineligible" aria-label="Worship Service: empty.">Not yet</button></div></div></div>
+      <div class="status-line plum" id="gather-priority">Frodhel has fewer duty slots (4 vs 6) and gets first pick on gatherings.</div>
+    </div>
+
+    <!-- Thanksgiving (fixed, both operators) -->
+    <div class="section-block">
+      <div class="fixed-row">
+        <div class="info">
+          <span class="ev-title">Thanksgiving</span>
+          <span class="ev-time">Saturday · 4:00 PM</span>
+        </div>
+        <div class="both-badges">
+          <span class="both-badge frodhel">Frodhel</span>
+          <span class="both-badge febe">Febe / Sani</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="save-bar">
+      <span class="save-status saved" id="save-status"><span class="pulse"></span><span id="save-status-text">Saving…</span></span>
+      <div class="save-actions">
+        <button class="discard-btn" id="discard-btn" type="button" disabled="">Discard</button>
+        <button class="save-btn" id="save-btn" type="button" disabled="">Save schedule</button>
+      </div>
+    </div>
+
+    <p class="sync-note" id="sync-note">Saving stores the schedule so the next operator sees it when they open this page.</p>
+  </section>
+
+</div>
+
+<script id="state-data" type="application/json">{"days":{"mon":{"morning":"frodhel","evening":"frodhel"},"tue":{"morning":"frodhel","evening":"frodhel"},"wed":{"morning":"febe","evening":"febe"},"thu":{"morning":"febe","evening":"febe"},"fri":{"morning":"febe","evening":"febe"}},"gatherings":{"prayer":null,"worship":null}}</script>
+
+<script>
+(function () {
+  var DAYS = [
+    { key: "mon", label: "Mon" },
+    { key: "tue", label: "Tue" },
+    { key: "wed", label: "Wed" },
+    { key: "thu", label: "Thu" },
+    { key: "fri", label: "Fri" }
+  ];
+  var OPERATORS = {
+    frodhel: { name: "Frodhel", cls: "op-frodhel", swatch: "frodhel" },
+    febe: { name: "Febe / Sani", cls: "op-febe", swatch: "febe" }
+  };
+  var GATHERINGS = [
+    { key: "prayer", title: "Prayer Meeting", time: "Wednesday · 3:30 AM" },
+    { key: "worship", title: "Worship Service", time: "Saturday · 3:30 AM" }
+  ];
+  var MORNING_CAP = 3;
+  var LS_KEY = "duty-schedule-operator";
+
+  var stateEl = document.getElementById("state-data");
+  var savedState = JSON.parse(stateEl.textContent);
+  var workingState = deepCopy(savedState);
+  var currentOperator = null;
+  var hasUnsaved = false;
+
+  /* ------------------------------------------------------------------
+     STORAGE ADAPTER — Firebase Realtime Database.
+
+     1. In the Firebase console: Build > Realtime Database > Create
+        Database. Start in "locked mode", then set the Rules to:
+
+          {
+            "rules": {
+              "schedule": {
+                ".read": true,
+                ".write": true
+              }
+            }
+          }
+
+        (This makes the schedule readable/writable by anyone with the
+        page URL — fine for a small private team tool, but note there
+        is no login, so don't put anything sensitive in here.)
+
+     2. In the Firebase console: Project settings (gear icon) >
+        General > Your apps > add a Web app (</> icon) if you don't
+        have one yet. Copy the "firebaseConfig" object it gives you
+        and paste it in place of the placeholder below.
+  ------------------------------------------------------------------ */
+  var firebaseConfig = {
+    apiKey: "AIzaSyAxWDC7NfZjgqzUhJWRTbDd3Lie6oLIHKs",
+    authDomain: "xxkdxiix-dhelzkiz.firebaseapp.com",
+    databaseURL: "https://xxkdxiix-dhelzkiz-default-rtdb.firebaseio.com",
+    projectId: "xxkdxiix-dhelzkiz",
+    storageBucket: "xxkdxiix-dhelzkiz.firebasestorage.app",
+    messagingSenderId: "930168321435",
+    appId: "1:930168321435:web:2226a1680920d374d31d3e",
+    measurementId: "G-VGHVKVF9B7"
+  };
+
+  var db = null;
+  var firebaseReady = false;
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    firebaseReady = true;
+  } catch (e) {
+    console.error("Firebase failed to initialize — check firebaseConfig.", e);
+  }
+
+  var Storage = {
+    load: function () {
+      if (!firebaseReady) {
+        return Promise.reject(new Error("Firebase did not initialize. Check the Firebase configuration."));
+      }
+
+      return db.ref("schedule").once("value").then(function (snap) {
+        var value = snap.val();
+
+        if (!value || !value.days || !value.gatherings) {
+          return null;
+        }
+
+        return value;
+      });
+    },
+
+    save: function (state) {
+      if (!firebaseReady) {
+        return Promise.reject(new Error("Firebase did not initialize. Check the Firebase configuration."));
+      }
+
+      return db.ref("schedule").set(state);
+    }
+  };
+
+  // Live sync: when the other operator saves, refresh this view automatically
+  // (only if you don't have unsaved local taps of your own — those are never
+  // overwritten silently).
+  if (firebaseReady) {
+    db.ref("schedule").on("value", function (snap) {
+      var remote = snap.val();
+      if (!remote || !remote.days || !remote.gatherings) return;
+      if (hasUnsaved) return;
+
+      savedState = remote;
+      workingState = deepCopy(savedState);
+
+      if (currentOperator) {
+        render();
+      }
+    }, function (err) {
+      console.error("Firebase live-sync failed:", err);
+      document.getElementById("save-status-text").textContent =
+        "Firebase read failed";
+    });
+  }
+
+  function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
+  function otherOp(opKey) { return opKey === "frodhel" ? "febe" : "frodhel"; }
+
+  function countsFor(opKey) {
+    var m = 0, e = 0;
+    DAYS.forEach(function (d) {
+      if (workingState.days[d.key].morning === opKey) m++;
+      if (workingState.days[d.key].evening === opKey) e++;
+    });
+    return { m: m, e: e };
+  }
+
+  function totalFor(opKey) {
+    var c = countsFor(opKey);
+    return c.m + c.e;
+  }
+
+  function eveningCapFor(opKey) { return countsFor(opKey).m === 3 ? 3 : 2; }
+
+  function canAssign(opKey, duty, dayKey) {
+    if (duty === "morning") {
+      var mExcl = 0;
+      DAYS.forEach(function (d) {
+        if (d.key !== dayKey && workingState.days[d.key].morning === opKey) mExcl++;
+      });
+      return mExcl + 1 <= MORNING_CAP;
+    } else {
+      var eExcl = 0;
+      DAYS.forEach(function (d) {
+        if (d.key !== dayKey && workingState.days[d.key].evening === opKey) eExcl++;
+      });
+      var wouldBeE = eExcl + 1;
+      var cap = eveningCapFor(opKey);
+      return wouldBeE <= cap;
+    }
+  }
+
+  function eligibleForGathering(opKey) {
+    return totalFor(opKey) <= totalFor(otherOp(opKey));
+  }
+
+  function hasGathering(opKey) {
+    return GATHERINGS.some(function (g) { return workingState.gatherings[g.key] === opKey; });
+  }
+
+  function opStatus(opKey) {
+    var c = countsFor(opKey);
+    if (c.m === 0 && c.e === 0) return { kind: "ok", text: "No days assigned yet." };
+    if (c.m === 3) return { kind: "locked", text: c.m + " morning / " + c.e + " evening — 3rd evening slot unlocked." };
+    var remaining = MORNING_CAP - c.m;
+    return {
+      kind: "ok",
+      text: c.m + " morning / " + c.e + " evening — evening capped at 2 until " + remaining + " more morning day" + (remaining === 1 ? "" : "s") + " " + (remaining === 1 ? "is" : "are") + " picked."
+    };
+  }
+
+  function overallStatus() {
+    var mFilled = 0, eFilled = 0;
+    DAYS.forEach(function (d) {
+      if (workingState.days[d.key].morning) mFilled++;
+      if (workingState.days[d.key].evening) eFilled++;
+    });
+    if (mFilled === 5 && eFilled === 5) return { ok: true, text: "Complete — all 5 mornings and 5 evenings are covered." };
+    var openCount = (5 - mFilled) + (5 - eFilled);
+    return { ok: false, text: (5 - mFilled) + " morning and " + (5 - eFilled) + " evening slot" + (openCount === 1 ? "" : "s") + " still open." };
+  }
+
+  function setUnsaved(val) {
+    hasUnsaved = val;
+    var statusEl = document.getElementById("save-status");
+    var textEl = document.getElementById("save-status-text");
+    var saveBtn = document.getElementById("save-btn");
+    var discardBtn = document.getElementById("discard-btn");
+    if (val) {
+      statusEl.classList.remove("saved");
+      textEl.textContent = "Unsaved changes";
+      saveBtn.disabled = false;
+      discardBtn.disabled = false;
+    } else {
+      statusEl.classList.add("saved");
+      textEl.textContent = "Saved — everyone sees this version";
+      saveBtn.disabled = true;
+      discardBtn.disabled = true;
+    }
+  }
+
+  function render() {
+    renderGrid();
+    renderPanels();
+    renderOverall();
+    renderGatherings();
+  }
+
+  function renderGrid() {
+    var grid = document.getElementById("grid");
+    grid.innerHTML = "";
+
+    var corner = document.createElement("div");
+    corner.className = "head-cell corner";
+    grid.appendChild(corner);
+    DAYS.forEach(function (d) {
+      var h = document.createElement("div");
+      h.className = "head-cell";
+      h.textContent = d.label;
+      grid.appendChild(h);
+    });
+
+    [["morning", "Morning", "6–9 AM"], ["evening", "Evening", "9PM–12AM"]].forEach(function (rowDef) {
+      var duty = rowDef[0];
+      var label = document.createElement("div");
+      label.className = "row-label";
+      label.innerHTML = '<span class="name">' + rowDef[1] + '</span><span class="time">' + rowDef[2] + '</span>';
+      grid.appendChild(label);
+
+      DAYS.forEach(function (d) {
+        var assigned = workingState.days[d.key][duty];
+        var btn = document.createElement("button");
+        btn.type = "button";
+        var ownership = "";
+        if (assigned) ownership = assigned === currentOperator ? " mine" : " not-mine";
+        btn.className = "cell" + (assigned ? " " + OPERATORS[assigned].cls + ownership : " empty");
+        btn.textContent = assigned ? OPERATORS[assigned].name : "";
+        btn.setAttribute("aria-label", d.label + " " + rowDef[1] + ": " + (assigned ? OPERATORS[assigned].name : "empty") + ".");
+
+        btn.addEventListener("click", function () {
+          if (assigned && assigned !== currentOperator) return;
+          if (assigned === currentOperator) {
+            workingState.days[d.key][duty] = null;
+          } else if (canAssign(currentOperator, duty, d.key)) {
+            workingState.days[d.key][duty] = currentOperator;
+          } else {
+            return;
+          }
+          setUnsaved(true);
+          render();
+        });
+        grid.appendChild(btn);
+      });
+    });
+  }
+
+  function renderPanels() {
+    var panels = document.getElementById("panels");
+    panels.innerHTML = "";
+    Object.keys(OPERATORS).forEach(function (opKey) {
+      var op = OPERATORS[opKey];
+      var c = countsFor(opKey);
+      var cap = eveningCapFor(opKey);
+      var st = opStatus(opKey);
+
+      var panel = document.createElement("div");
+      panel.className = "panel" + (opKey === currentOperator ? " is-me" : "");
+      panel.style.color = opKey === "frodhel" ? "var(--gold)" : "var(--teal)";
+
+      var title = document.createElement("p");
+      title.className = "op-name";
+      title.style.color = "var(--ink)";
+      title.innerHTML = '<span class="swatch ' + op.swatch + '"></span>' + op.name + (opKey === currentOperator ? ' <span class="you-tag">You</span>' : '');
+      panel.appendChild(title);
+
+      var counts = document.createElement("div");
+      counts.className = "counts";
+      counts.innerHTML =
+        '<div class="count-box"><div class="k">Morning</div><div class="v">' + c.m + ' <span class="cap">/ 3</span></div></div>' +
+        '<div class="count-box"><div class="k">Evening</div><div class="v">' + c.e + ' <span class="cap">/ ' + cap + '</span></div></div>';
+      panel.appendChild(counts);
+
+      var status = document.createElement("div");
+      status.className = "status-line " + (st.kind === "locked" ? "locked" : "ok");
+      status.textContent = st.text;
+      panel.appendChild(status);
+
+      panels.appendChild(panel);
+    });
+  }
+
+  function renderOverall() {
+    var st = overallStatus();
+    var el = document.getElementById("overall-status");
+    el.className = "status-line " + (st.ok ? "ok" : "warn");
+    el.textContent = st.text;
+  }
+
+  function renderGatherings() {
+    var list = document.getElementById("gather-list");
+    list.innerHTML = "";
+
+    GATHERINGS.forEach(function (g) {
+      var assigned = workingState.gatherings[g.key];
+      var row = document.createElement("div");
+      row.className = "gather-row";
+
+      var info = document.createElement("div");
+      info.className = "info";
+      info.innerHTML = '<span class="ev-title">' + g.title + '</span><span class="ev-time">' + g.time + '</span>';
+      row.appendChild(info);
+
+      var action = document.createElement("div");
+      action.className = "action";
+
+      var btn = document.createElement("button");
+      btn.type = "button";
+      var ownership = "";
+      var blocked = false;
+      var blockedLabel = "Not yet";
+      if (assigned) {
+        ownership = assigned === currentOperator ? " mine" : " not-mine";
+      } else if (hasGathering(currentOperator)) {
+        blocked = true;
+        blockedLabel = "One only";
+      } else if (!eligibleForGathering(currentOperator)) {
+        blocked = true;
+        blockedLabel = "Not yet";
+      }
+      btn.className = "cell gather-cell" + (assigned ? " " + OPERATORS[assigned].cls + ownership : " empty" + (blocked ? " ineligible" : ""));
+      btn.textContent = assigned ? OPERATORS[assigned].name : (blocked ? blockedLabel : "");
+      btn.setAttribute("aria-label", g.title + ": " + (assigned ? OPERATORS[assigned].name : "empty") + ".");
+
+      btn.addEventListener("click", function () {
+        if (assigned && assigned !== currentOperator) return;
+        if (assigned === currentOperator) {
+          workingState.gatherings[g.key] = null;
+        } else if (!assigned && !hasGathering(currentOperator) && eligibleForGathering(currentOperator)) {
+          workingState.gatherings[g.key] = currentOperator;
+        } else {
+          return;
+        }
+        setUnsaved(true);
+        render();
+      });
+
+      action.appendChild(btn);
+      row.appendChild(action);
+      list.appendChild(row);
+    });
+
+    var priorityEl = document.getElementById("gather-priority");
+    var tFrodhel = totalFor("frodhel");
+    var tFebe = totalFor("febe");
+    if (tFrodhel === tFebe) {
+      priorityEl.textContent = "Duty totals are tied (" + tFrodhel + " each) — either operator may pick.";
+    } else {
+      var leader = tFrodhel < tFebe ? "frodhel" : "febe";
+      priorityEl.textContent = OPERATORS[leader].name + " has fewer duty slots (" + Math.min(tFrodhel, tFebe) + " vs " + Math.max(tFrodhel, tFebe) + ") and gets first pick on gatherings.";
+    }
+  }
+
+  document.getElementById("reset-btn").addEventListener("click", function () {
+    DAYS.forEach(function (d) {
+      if (workingState.days[d.key].morning === currentOperator) workingState.days[d.key].morning = null;
+      if (workingState.days[d.key].evening === currentOperator) workingState.days[d.key].evening = null;
+    });
+    GATHERINGS.forEach(function (g) {
+      if (workingState.gatherings[g.key] === currentOperator) workingState.gatherings[g.key] = null;
+    });
+    setUnsaved(true);
+    render();
+  });
+
+  document.getElementById("discard-btn").addEventListener("click", function () {
+    workingState = deepCopy(savedState);
+    setUnsaved(false);
+    render();
+  });
+
+  document.getElementById("save-btn").addEventListener("click", function () {
+    var stateToSave = deepCopy(workingState);
+    var textEl = document.getElementById("save-status-text");
+    var saveBtn = document.getElementById("save-btn");
+
+    saveBtn.disabled = true;
+    textEl.textContent = "Saving\u2026";
+
+    Storage.save(stateToSave).then(function () {
+      savedState = deepCopy(stateToSave);
+      workingState = deepCopy(savedState);
+      stateEl.textContent = JSON.stringify(savedState);
+      setUnsaved(false);
+      textEl.textContent = "Saved to Firebase";
+    }).catch(function (err) {
+      console.error("Firebase save failed:", err);
+      setUnsaved(true);
+      textEl.textContent = "Save failed — Firebase did not accept the change";
+      alert("The schedule could not be saved to Firebase.\n\n" +
+            (err && err.message ? err.message : "Check your Firebase Realtime Database Rules and internet connection."));
+    }).finally(function () {
+      saveBtn.disabled = false;
+    });
+  });
+
+  function selectOperator(opKey) {
+    currentOperator = opKey;
+    workingState = deepCopy(savedState);
+    setUnsaved(false);
+    try { localStorage.setItem(LS_KEY, opKey); } catch (e) {}
+
+    document.getElementById("screen-select").hidden = true;
+    document.getElementById("screen-board").hidden = false;
+    document.getElementById("whoami-name").textContent = OPERATORS[opKey].name;
+    document.getElementById("whoami-dot").style.background = opKey === "frodhel" ? "var(--gold)" : "var(--teal)";
+    render();
+  }
+
+  document.querySelectorAll(".op-choice").forEach(function (btn) {
+    btn.addEventListener("click", function () { selectOperator(btn.getAttribute("data-op")); });
+  });
+
+  document.getElementById("switch-op-btn").addEventListener("click", function () {
+    document.getElementById("screen-board").hidden = true;
+    document.getElementById("screen-select").hidden = false;
+  });
+
+  // Load the shared schedule from Firebase before opening the board.
+  // If Firebase cannot be read, do NOT silently use the embedded default:
+  // that would make another device appear to have "reset" the schedule.
+  Storage.load().then(function (loaded) {
+    if (loaded) {
+      savedState = loaded;
+      workingState = deepCopy(savedState);
+    }
+
+    var remembered = null;
+    try { remembered = localStorage.getItem(LS_KEY); } catch (e) {}
+
+    if (remembered && OPERATORS[remembered]) {
+      selectOperator(remembered);
+    } else {
+      document.getElementById("save-status-text").textContent =
+        loaded ? "Connected to Firebase" : "Firebase connected — no saved schedule yet";
+    }
+  }).catch(function (err) {
+    console.error("Firebase load failed:", err);
+
+    var textEl = document.getElementById("save-status-text");
+    textEl.textContent = "Firebase connection failed";
+
+    alert("The shared schedule could not be loaded from Firebase.\n\n" +
+          (err && err.message ? err.message :
+           "Check your Firebase Realtime Database Rules and internet connection."));
+  });
+})();
+</script>
+
+
+</body></html>
