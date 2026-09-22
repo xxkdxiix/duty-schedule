@@ -6,8 +6,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
-<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
 <style>
   :root {
     --bg: #FAF6EF;
@@ -438,70 +436,51 @@
   var hasUnsaved = false;
 
   /* ------------------------------------------------------------------
-     STORAGE ADAPTER — Firebase Realtime Database.
+     STORAGE ADAPTER — Google Sheets, via an Apps Script Web App acting
+     as a tiny API in front of the sheet.
 
-     1. In the Firebase console: Build > Realtime Database > Create
-        Database. Start in "locked mode", then set the Rules to:
+     Setup (see apps-script-code.gs for the script to paste in):
+     1. Create a Google Sheet with a tab named exactly "Data".
+     2. Extensions > Apps Script, paste in the doGet/doPost code, and
+        Deploy > New deployment > Web app > Execute as: Me >
+        Who has access: Anyone.
+     3. Paste the resulting URL (it ends in /exec) below.
 
-          {
-            "rules": {
-              "schedule": {
-                ".read": true,
-                ".write": true
-              }
-            }
-          }
-
-        (This makes the schedule readable/writable by anyone with the
-        page URL — fine for a small private team tool, but note there
-        is no login, so don't put anything sensitive in here.)
-
-     2. In the Firebase console: Project settings (gear icon) >
-        General > Your apps > add a Web app (</> icon) if you don't
-        have one yet. Copy the "firebaseConfig" object it gives you
-        and paste it in place of the placeholder below.
+     Note: this makes the schedule readable/writable by anyone with the
+     page URL — fine for a small private team tool, but there's no
+     login, so don't put anything sensitive in the sheet.
   ------------------------------------------------------------------ */
-  var firebaseConfig = {
-    apiKey: "AIzaSyAxWDC7NfZjgqzUhJWRTbDd3Lie6oLIHKs",
-    authDomain: "xxkdxiix-dhelzkiz.firebaseapp.com",
-    databaseURL: "https://xxkdxiix-dhelzkiz-default-rtdb.firebaseio.com",
-    projectId: "xxkdxiix-dhelzkiz",
-    storageBucket: "xxkdxiix-dhelzkiz.firebasestorage.app",
-    messagingSenderId: "930168321435",
-    appId: "1:930168321435:web:2226a1680920d374d31d3e",
-    measurementId: "G-VGHVKVF9B7"
-  };
-
-  var db = null;
-  var firebaseReady = false;
-  try {
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.database();
-    firebaseReady = true;
-  } catch (e) {
-    console.error("Firebase failed to initialize — check firebaseConfig.", e);
-  }
+  var SHEET_API_URL = "https://script.google.com/macros/s/AKfycbyAXHrIf31XXOA-MKDuWwv8uEmwQBnyNG9iWiCv09zmtRz7mBdWqaWK3PF8t7ACIF1X/exec";
+  var sheetReady = SHEET_API_URL.indexOf("PASTE_YOUR") !== 0;
+  var POLL_INTERVAL_MS = 20000; // how often to check for the other operator's changes
 
   var Storage = {
     load: function () {
-      if (!firebaseReady) return Promise.resolve(null);
-      return db.ref("schedule").once("value").then(function (snap) {
-        return snap.val();
-      });
+      if (!sheetReady) return Promise.resolve(null);
+      return fetch(SHEET_API_URL, { method: "GET" })
+        .then(function (r) { return r.json(); })
+        .catch(function (e) { console.error("Sheet load failed", e); return null; });
     },
     save: function (state) {
-      if (!firebaseReady) return Promise.reject(new Error("Firebase not configured"));
-      return db.ref("schedule").set(state);
+      if (!sheetReady) return Promise.reject(new Error("Sheet API URL not configured"));
+      // text/plain avoids a CORS preflight request, which Apps Script Web
+      // Apps don't handle — the script still reads it as JSON on its end.
+      return fetch(SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(state)
+      }).then(function (r) {
+        if (!r.ok) throw new Error("save failed");
+        return r.json();
+      });
     }
   };
 
   function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
 
-  // Firebase drops any key whose value is null (and drops a whole object if
-  // every field inside it is null). So a loaded record can be missing entire
-  // days or the whole "gatherings" section just because they were empty.
-  // This rebuilds a complete, correctly-shaped state from whatever partial
-  // data actually came back.
+  // A stored record can be partial (e.g. a day or the gatherings section
+  // left out entirely). This rebuilds a complete, correctly-shaped state
+  // from whatever data actually came back, filling in the rest as empty.
   function emptyState() {
     return {
       days: {
@@ -533,18 +512,20 @@
     return base;
   }
 
-  // Live sync: when the other operator saves, refresh this view automatically
-  // (only if you don't have unsaved local taps of your own — those are never
-  // overwritten silently).
-  if (firebaseReady) {
-    db.ref("schedule").on("value", function (snap) {
-      var remote = snap.val();
-      if (!remote) return;
+  // Near-live sync: Google Sheets/Apps Script has no push mechanism like
+  // Firebase, so this polls for changes instead. Only refreshes the view
+  // if you don't have unsaved local taps of your own — those are never
+  // overwritten silently.
+  if (sheetReady) {
+    setInterval(function () {
       if (hasUnsaved) return;
-      savedState = normalizeState(remote);
-      workingState = deepCopy(savedState);
-      if (currentOperator) render();
-    });
+      Storage.load().then(function (remote) {
+        if (!remote) return;
+        savedState = normalizeState(remote);
+        workingState = deepCopy(savedState);
+        if (currentOperator) render();
+      });
+    }, POLL_INTERVAL_MS);
   }
   function otherOp(opKey) { return opKey === "frodhel" ? "febe" : "frodhel"; }
 
