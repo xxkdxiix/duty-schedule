@@ -353,7 +353,7 @@
         <span class="chip"><span class="dot morning"></span>Morning · Mon–Fri · 6:00–9:00 AM</span>
         <span class="chip"><span class="dot evening"></span>Evening · Mon–Fri · 9:00 PM–12:00 AM</span>
       </div>
-      <p class="rule-note">Rule: to take 3 evening slots, you must first hold 3 morning slots. With fewer than 3 mornings — or none at all — you're capped at 2 evening slots.</p>
+      <p class="rule-note">Rule: if you select 3 morning slots, you must also select 3 evening slots. With fewer than 3 mornings, you may select up to 2 evening slots.</p>
     </header>
 
     <div class="board">
@@ -371,7 +371,7 @@
     <!-- Pagkakatipon -->
     <div class="section-block">
       <h2 class="section-title">Pagkakatipon</h2>
-      <p class="section-sub">One operator per gathering, and each operator may take at most one gathering total. Rule: whoever has fewer total duty slots (morning + evening) above gets first pick here.</p>
+      <p class="section-sub">One operator per gathering, and each operator may take at most one gathering total. Rule: an operator can pick a gathering once they have at least 1 morning slot and 1 evening slot, with no more than 2 evening slots. After picking a gathering, their morning and evening schedule is locked until they unselect the gathering.</p>
       <div class="hours" style="margin-top:0; margin-bottom:14px;">
         <span class="chip"><span class="dot gather"></span>Prayer Meeting · Wed · 3:30 AM</span>
         <span class="chip"><span class="dot gather"></span>Worship Service · Sat · 3:30 AM</span>
@@ -392,6 +392,10 @@
           <span class="both-badge febe">Febe / Sani</span>
         </div>
       </div>
+    </div>
+
+    <div class="status-line warn" id="schedule-warning" hidden style="margin-bottom:12px;">
+      <span>⚠️</span><span id="schedule-warning-text"></span>
     </div>
 
     <div class="save-bar">
@@ -545,6 +549,18 @@
 
   function eveningCapFor(opKey) { return countsFor(opKey).m === 3 ? 3 : 2; }
 
+  // A complete 3-morning selection requires exactly 3 evening selections too.
+  function scheduleRuleFor(opKey) {
+    var c = countsFor(opKey);
+    if (c.m === 3 && c.e < 3) {
+      return {
+        valid: false,
+        message: "You selected all 3 morning slots. You must also select 3 evening slots before you can save."
+      };
+    }
+    return { valid: true, message: "" };
+  }
+
   function canAssign(opKey, duty, dayKey) {
     if (duty === "morning") {
       var mExcl = 0;
@@ -564,7 +580,13 @@
   }
 
   function eligibleForGathering(opKey) {
-    return totalFor(opKey) <= totalFor(otherOp(opKey));
+    var c = countsFor(opKey);
+    return c.m >= 1 && c.e >= 1 && c.e <= 2;
+  }
+
+  function gatheringLockMessage(opKey) {
+    if (!hasGathering(opKey)) return "";
+    return "Morning and evening schedules are locked while you have a Pagkakatipon schedule. Unselect your Pagkakatipon schedule first to change them.";
   }
 
   function hasGathering(opKey) {
@@ -593,16 +615,36 @@
     return { ok: false, text: (5 - mFilled) + " morning and " + (5 - eFilled) + " evening slot" + (openCount === 1 ? "" : "s") + " still open." };
   }
 
+  function updateScheduleValidation() {
+    var rule = currentOperator ? scheduleRuleFor(currentOperator) : { valid: true, message: "" };
+    var warningEl = document.getElementById("schedule-warning");
+    var warningTextEl = document.getElementById("schedule-warning-text");
+    var saveBtn = document.getElementById("save-btn");
+
+    if (!rule.valid) {
+      warningTextEl.textContent = rule.message;
+      warningEl.hidden = false;
+      saveBtn.disabled = true;
+    } else {
+      warningTextEl.textContent = "";
+      warningEl.hidden = true;
+      saveBtn.disabled = !hasUnsaved;
+    }
+    return rule.valid;
+  }
+
   function setUnsaved(val) {
     hasUnsaved = val;
     var statusEl = document.getElementById("save-status");
     var textEl = document.getElementById("save-status-text");
     var saveBtn = document.getElementById("save-btn");
     var discardBtn = document.getElementById("discard-btn");
+    var ruleValid = updateScheduleValidation();
+
     if (val) {
       statusEl.classList.remove("saved");
-      textEl.textContent = "Unsaved changes";
-      saveBtn.disabled = false;
+      textEl.textContent = ruleValid ? "Unsaved changes" : "Fix the schedule before saving";
+      saveBtn.disabled = !ruleValid;
       discardBtn.disabled = false;
     } else {
       statusEl.classList.add("saved");
@@ -617,6 +659,7 @@
     renderPanels();
     renderOverall();
     renderGatherings();
+    updateScheduleValidation();
   }
 
   function renderGrid() {
@@ -651,6 +694,10 @@
         btn.setAttribute("aria-label", d.label + " " + rowDef[1] + ": " + (assigned ? OPERATORS[assigned].name : "empty") + ".");
 
         btn.addEventListener("click", function () {
+          if (hasGathering(currentOperator)) {
+            window.alert(gatheringLockMessage(currentOperator));
+            return;
+          }
           if (assigned && assigned !== currentOperator) return;
           if (assigned === currentOperator) {
             workingState.days[d.key][duty] = null;
@@ -659,6 +706,12 @@
           } else {
             return;
           }
+
+          // Selecting the 3rd morning requires 3 evenings as well.
+          if (duty === "morning" && countsFor(currentOperator).m === 3 && countsFor(currentOperator).e < 3) {
+            window.alert("Warning: You selected 3 morning slots. You must also select 3 evening slots before you can save the schedule.");
+          }
+
           setUnsaved(true);
           render();
         });
@@ -738,7 +791,7 @@
         blockedLabel = "One only";
       } else if (!eligibleForGathering(currentOperator)) {
         blocked = true;
-        blockedLabel = "Not yet";
+        blockedLabel = "Need 1 AM + 1 PM";
       }
       btn.className = "cell gather-cell" + (assigned ? " " + OPERATORS[assigned].cls + ownership : " empty" + (blocked ? " ineligible" : ""));
       btn.textContent = assigned ? OPERATORS[assigned].name : (blocked ? blockedLabel : "");
@@ -763,13 +816,13 @@
     });
 
     var priorityEl = document.getElementById("gather-priority");
-    var tFrodhel = totalFor("frodhel");
-    var tFebe = totalFor("febe");
-    if (tFrodhel === tFebe) {
-      priorityEl.textContent = "Duty totals are tied (" + tFrodhel + " each) — either operator may pick.";
+    var c = countsFor(currentOperator);
+    if (hasGathering(currentOperator)) {
+      priorityEl.textContent = gatheringLockMessage(currentOperator);
+    } else if (c.m >= 2 && c.e <= 2) {
+      priorityEl.textContent = "You are eligible to pick a Pagkakatipon schedule. Once selected, your morning and evening schedules will be locked until you unselect it.";
     } else {
-      var leader = tFrodhel < tFebe ? "frodhel" : "febe";
-      priorityEl.textContent = OPERATORS[leader].name + " has fewer duty slots (" + Math.min(tFrodhel, tFebe) + " vs " + Math.max(tFrodhel, tFebe) + ") and gets first pick on gatherings.";
+      priorityEl.textContent = "You can pick Pagkakatipon after selecting at least 1 morning slot and 1 evening slot, with no more than 2 evening slots.";
     }
   }
 
@@ -792,6 +845,12 @@
   });
 
   document.getElementById("save-btn").addEventListener("click", function () {
+    if (!scheduleRuleFor(currentOperator).valid) {
+      updateScheduleValidation();
+      window.alert("Please select 3 evening slots before saving. An operator with 3 morning slots must also have 3 evening slots.");
+      return;
+    }
+
     savedState = deepCopy(workingState);
     stateEl.textContent = JSON.stringify(savedState);
     setUnsaved(false);
@@ -815,6 +874,7 @@
     document.getElementById("whoami-name").textContent = OPERATORS[opKey].name;
     document.getElementById("whoami-dot").style.background = opKey === "frodhel" ? "var(--gold)" : "var(--teal)";
     render();
+    updateScheduleValidation();
   }
 
   document.querySelectorAll(".op-choice").forEach(function (btn) {
