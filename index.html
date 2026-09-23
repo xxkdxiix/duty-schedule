@@ -605,6 +605,10 @@
     var c = countsFor(opKey);
     if (duty === "morning" && c.m >= 3) return false;
     if (duty === "evening" && c.e >= 3) return false;
+    // The first operator can't get ahead on evening slots — evening count
+    // may never exceed morning count, so e.g. a 3rd evening slot requires
+    // 3 morning slots already selected.
+    if (duty === "evening" && c.e >= c.m) return false;
     return true;
   }
 
