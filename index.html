@@ -353,11 +353,12 @@
         <span class="chip"><span class="dot morning"></span>Morning · Mon–Fri · 6:00–9:00 AM</span>
         <span class="chip"><span class="dot evening"></span>Evening · Mon–Fri · 9:00 PM–12:00 AM</span>
       </div>
-      <p class="rule-note">Rule: to take 3 evening slots, you must first hold 3 morning slots. With fewer than 3 mornings — or none at all — you're capped at 2 evening slots.</p>
+      <p class="rule-note">First operator: up to 3 morning and 3 evening slots. The second operator may select all remaining open slots. If you select 3 morning slots, you must also select 3 evening slots before saving.</p>
     </header>
 
     <div class="board">
-      <p class="legend-hint" id="legend-hint">Picks that would break the rule above are blocked automatically.</p>
+      <p class="legend-hint" id="legend-hint">First operator may select up to 3 morning and 3 evening slots. The second operator may select all remaining open slots.</p>
+      <div class="rule-note" id="schedule-warning" hidden><strong>Schedule rule:</strong> <span id="schedule-warning-text"></span></div>
       <div class="grid" id="grid"><div class="head-cell corner"></div><div class="head-cell">Mon</div><div class="head-cell">Tue</div><div class="head-cell">Wed</div><div class="head-cell">Thu</div><div class="head-cell">Fri</div><div class="row-label"><span class="name">Morning</span><span class="time">6–9 AM</span></div><button type="button" class="cell op-frodhel not-mine" aria-label="Mon Morning: Frodhel.">Frodhel</button><button type="button" class="cell op-frodhel not-mine" aria-label="Tue Morning: Frodhel.">Frodhel</button><button type="button" class="cell op-febe mine" aria-label="Wed Morning: Febe / Sani.">Febe / Sani</button><button type="button" class="cell op-febe mine" aria-label="Thu Morning: Febe / Sani.">Febe / Sani</button><button type="button" class="cell op-febe mine" aria-label="Fri Morning: Febe / Sani.">Febe / Sani</button><div class="row-label"><span class="name">Evening</span><span class="time">9PM–12AM</span></div><button type="button" class="cell op-frodhel not-mine" aria-label="Mon Evening: Frodhel.">Frodhel</button><button type="button" class="cell op-frodhel not-mine" aria-label="Tue Evening: Frodhel.">Frodhel</button><button type="button" class="cell op-febe mine" aria-label="Wed Evening: Febe / Sani.">Febe / Sani</button><button type="button" class="cell op-febe mine" aria-label="Thu Evening: Febe / Sani.">Febe / Sani</button><button type="button" class="cell op-febe mine" aria-label="Fri Evening: Febe / Sani.">Febe / Sani</button></div>
     </div>
 
@@ -371,7 +372,7 @@
     <!-- Pagkakatipon -->
     <div class="section-block">
       <h2 class="section-title">Pagkakatipon</h2>
-      <p class="section-sub">One operator per gathering, and each operator may take at most one gathering total. Rule: whoever has fewer total duty slots (morning + evening) above gets first pick here.</p>
+      <p class="section-sub">One operator per gathering, and each operator may take at most one gathering total. Rule: an operator can pick a gathering once they have at least 1 morning slot and 1 evening slot. When you select a gathering, the remaining gathering is automatically assigned to the other operator; unselecting your gathering also clears that automatic assignment.</p>
       <div class="hours" style="margin-top:0; margin-bottom:14px;">
         <span class="chip"><span class="dot gather"></span>Prayer Meeting · Wed · 3:30 AM</span>
         <span class="chip"><span class="dot gather"></span>Worship Service · Sat · 3:30 AM</span>
@@ -426,11 +427,10 @@
     { key: "prayer", title: "Prayer Meeting", time: "Wednesday · 3:30 AM" },
     { key: "worship", title: "Worship Service", time: "Saturday · 3:30 AM" }
   ];
-  var MORNING_CAP = 3;
-  var LS_KEY = "duty-schedule-operator";
+    var LS_KEY = "duty-schedule-operator";
 
   var stateEl = document.getElementById("state-data");
-  var savedState = JSON.parse(stateEl.textContent);
+  var savedState = normalizeState(JSON.parse(stateEl.textContent));
   var workingState = deepCopy(savedState);
   var currentOperator = null;
   var hasUnsaved = false;
@@ -483,6 +483,7 @@
   // from whatever data actually came back, filling in the rest as empty.
   function emptyState() {
     return {
+      firstOperator: null,
       days: {
         mon: { morning: null, evening: null },
         tue: { morning: null, evening: null },
@@ -490,12 +491,16 @@
         thu: { morning: null, evening: null },
         fri: { morning: null, evening: null }
       },
-      gatherings: { prayer: null, worship: null }
+      gatherings: { prayer: null, worship: null },
+      gatheringsAuto: { prayer: false, worship: false }
     };
   }
 
   function normalizeState(raw) {
     var base = emptyState();
+    if (raw && (raw.firstOperator === "frodhel" || raw.firstOperator === "febe")) {
+      base.firstOperator = raw.firstOperator;
+    }
     if (raw && raw.days) {
       Object.keys(base.days).forEach(function (k) {
         if (raw.days[k]) {
@@ -508,6 +513,34 @@
       Object.keys(base.gatherings).forEach(function (k) {
         if (raw.gatherings[k]) base.gatherings[k] = raw.gatherings[k];
       });
+    }
+    if (raw && raw.gatheringsAuto) {
+      Object.keys(base.gatheringsAuto).forEach(function (k) {
+        base.gatheringsAuto[k] = !!raw.gatheringsAuto[k];
+      });
+    } else if (raw && raw.gatherings) {
+      // Data saved before this auto/manual distinction existed has no
+      // gatheringsAuto field at all. Treat those old assignments as
+      // auto-filled (non-locking) rather than manual, so a schedule saved
+      // under the old rules doesn't wrongly keep someone's morning/evening
+      // locked with no way to tell it was ever a real manual pick.
+      Object.keys(base.gatherings).forEach(function (k) {
+        if (base.gatherings[k]) base.gatheringsAuto[k] = true;
+      });
+    }
+
+    // Older saved data did not contain firstOperator. If only one operator
+    // already owns any duty slots, that operator is treated as the first one.
+    if (!base.firstOperator) {
+      var frodhelCount = 0, febeCount = 0;
+      Object.keys(base.days).forEach(function (k) {
+        if (base.days[k].morning === "frodhel") frodhelCount++;
+        if (base.days[k].evening === "frodhel") frodhelCount++;
+        if (base.days[k].morning === "febe") febeCount++;
+        if (base.days[k].evening === "febe") febeCount++;
+      });
+      if (frodhelCount > 0 && febeCount === 0) base.firstOperator = "frodhel";
+      else if (febeCount > 0 && frodhelCount === 0) base.firstOperator = "febe";
     }
     return base;
   }
@@ -543,43 +576,86 @@
     return c.m + c.e;
   }
 
-  function eveningCapFor(opKey) { return countsFor(opKey).m === 3 ? 3 : 2; }
+  // The first operator is limited to 3 morning + 3 evening selections.
+  // Once that operator saves, the second operator can take every remaining
+  // open slot, even when that means more than 3.
+  function isFirstOperator(opKey) {
+    if (workingState.firstOperator) return workingState.firstOperator === opKey;
+    var other = otherOp(opKey);
+    return totalFor(other) === 0;
+  }
+
+  function scheduleRuleFor(opKey) {
+    var c = countsFor(opKey);
+    // Additional rule: whenever an operator reaches 3 morning slots,
+    // they must also have exactly 3 evening slots before saving.
+    if (c.m === 3 && c.e < 3) {
+      return {
+        valid: false,
+        message: "You selected 3 morning schedules. You must also select 3 evening schedules before you can save."
+      };
+    }
+    return { valid: true, message: "" };
+  }
 
   function canAssign(opKey, duty, dayKey) {
-    if (duty === "morning") {
-      var mExcl = 0;
-      DAYS.forEach(function (d) {
-        if (d.key !== dayKey && workingState.days[d.key].morning === opKey) mExcl++;
-      });
-      return mExcl + 1 <= MORNING_CAP;
-    } else {
-      var eExcl = 0;
-      DAYS.forEach(function (d) {
-        if (d.key !== dayKey && workingState.days[d.key].evening === opKey) eExcl++;
-      });
-      var wouldBeE = eExcl + 1;
-      var cap = eveningCapFor(opKey);
-      return wouldBeE <= cap;
-    }
+    if (workingState.days[dayKey][duty]) return false;
+    if (!isFirstOperator(opKey)) return true;
+
+    var c = countsFor(opKey);
+    if (duty === "morning" && c.m >= 3) return false;
+    if (duty === "evening" && c.e >= 3) return false;
+    return true;
   }
 
   function eligibleForGathering(opKey) {
-    return totalFor(opKey) <= totalFor(otherOp(opKey));
+    var c = countsFor(opKey);
+    // Keep the existing 1 morning + 1 evening requirement.
+    // An operator with more than 2 morning AND more than 2 evening
+    // slots cannot take a Pagkakatipon; the operator with fewer slots can.
+    if (c.m > 2 && c.e > 2) return false;
+    return c.m >= 1 && c.e >= 1;
+  }
+
+  function gatheringLockMessage(opKey) {
+    if (!hasManualGathering(opKey)) return "";
+    return "Morning and evening schedules are locked while you have a Pagkakatipon schedule. Unselect your Pagkakatipon schedule first to change them.";
   }
 
   function hasGathering(opKey) {
     return GATHERINGS.some(function (g) { return workingState.gatherings[g.key] === opKey; });
   }
 
+  // True when the OTHER gathering slot (not this one) is already claimed —
+  // meaning a pairing already exists and this key is just its open half.
+  // Completing an existing pair is always allowed, regardless of duty slot
+  // counts, since the other operator already committed to this Pagkakatipon.
+  function otherGatheringFilled(key) {
+    return GATHERINGS.some(function (other) { return other.key !== key && workingState.gatherings[other.key]; });
+  }
+
+  // Only counts a gathering the operator picked themselves — not one that
+  // was auto-filled for them as the pair of the other operator's pick.
+  // Morning/evening locking should only apply to the operator who actually
+  // picked their own Pagkakatipon schedule.
+  function hasManualGathering(opKey) {
+    return GATHERINGS.some(function (g) {
+      return workingState.gatherings[g.key] === opKey && !workingState.gatheringsAuto[g.key];
+    });
+  }
+
   function opStatus(opKey) {
     var c = countsFor(opKey);
-    if (c.m === 0 && c.e === 0) return { kind: "ok", text: "No days assigned yet." };
-    if (c.m === 3) return { kind: "locked", text: c.m + " morning / " + c.e + " evening — 3rd evening slot unlocked." };
-    var remaining = MORNING_CAP - c.m;
-    return {
-      kind: "ok",
-      text: c.m + " morning / " + c.e + " evening — evening capped at 2 until " + remaining + " more morning day" + (remaining === 1 ? "" : "s") + " " + (remaining === 1 ? "is" : "are") + " picked."
-    };
+    if (c.m === 0 && c.e === 0) {
+      return {
+        kind: "ok",
+        text: isFirstOperator(opKey) ? "First operator — up to 3 morning / 3 evening." : "Second operator — may take all remaining slots."
+      };
+    }
+    if (isFirstOperator(opKey)) {
+      return { kind: "ok", text: c.m + " morning / " + c.e + " evening (limit: 3 each)." };
+    }
+    return { kind: "ok", text: c.m + " morning / " + c.e + " evening (remaining slots)." };
   }
 
   function overallStatus() {
@@ -593,16 +669,36 @@
     return { ok: false, text: (5 - mFilled) + " morning and " + (5 - eFilled) + " evening slot" + (openCount === 1 ? "" : "s") + " still open." };
   }
 
+  function updateScheduleValidation() {
+    var rule = currentOperator ? scheduleRuleFor(currentOperator) : { valid: true, message: "" };
+    var warningEl = document.getElementById("schedule-warning");
+    var warningTextEl = document.getElementById("schedule-warning-text");
+    var saveBtn = document.getElementById("save-btn");
+
+    if (!rule.valid) {
+      warningTextEl.textContent = rule.message;
+      warningEl.hidden = false;
+      saveBtn.disabled = true;
+    } else {
+      warningTextEl.textContent = "";
+      warningEl.hidden = true;
+      saveBtn.disabled = !hasUnsaved;
+    }
+    return rule.valid;
+  }
+
   function setUnsaved(val) {
     hasUnsaved = val;
     var statusEl = document.getElementById("save-status");
     var textEl = document.getElementById("save-status-text");
     var saveBtn = document.getElementById("save-btn");
     var discardBtn = document.getElementById("discard-btn");
+    var ruleValid = updateScheduleValidation();
+
     if (val) {
       statusEl.classList.remove("saved");
-      textEl.textContent = "Unsaved changes";
-      saveBtn.disabled = false;
+      textEl.textContent = ruleValid ? "Unsaved changes" : "Fix the schedule before saving";
+      saveBtn.disabled = !ruleValid;
       discardBtn.disabled = false;
     } else {
       statusEl.classList.add("saved");
@@ -617,6 +713,7 @@
     renderPanels();
     renderOverall();
     renderGatherings();
+    updateScheduleValidation();
   }
 
   function renderGrid() {
@@ -651,6 +748,10 @@
         btn.setAttribute("aria-label", d.label + " " + rowDef[1] + ": " + (assigned ? OPERATORS[assigned].name : "empty") + ".");
 
         btn.addEventListener("click", function () {
+          if (hasManualGathering(currentOperator)) {
+            window.alert(gatheringLockMessage(currentOperator));
+            return;
+          }
           if (assigned && assigned !== currentOperator) return;
           if (assigned === currentOperator) {
             workingState.days[d.key][duty] = null;
@@ -659,6 +760,7 @@
           } else {
             return;
           }
+
           setUnsaved(true);
           render();
         });
@@ -673,7 +775,6 @@
     Object.keys(OPERATORS).forEach(function (opKey) {
       var op = OPERATORS[opKey];
       var c = countsFor(opKey);
-      var cap = eveningCapFor(opKey);
       var st = opStatus(opKey);
 
       var panel = document.createElement("div");
@@ -689,8 +790,8 @@
       var counts = document.createElement("div");
       counts.className = "counts";
       counts.innerHTML =
-        '<div class="count-box"><div class="k">Morning</div><div class="v">' + c.m + ' <span class="cap">/ 3</span></div></div>' +
-        '<div class="count-box"><div class="k">Evening</div><div class="v">' + c.e + ' <span class="cap">/ ' + cap + '</span></div></div>';
+        '<div class="count-box"><div class="k">Morning</div><div class="v">' + c.m + '</div></div>' +
+        '<div class="count-box"><div class="k">Evening</div><div class="v">' + c.e + '</div></div>';
       panel.appendChild(counts);
 
       var status = document.createElement("div");
@@ -736,9 +837,9 @@
       } else if (hasGathering(currentOperator)) {
         blocked = true;
         blockedLabel = "One only";
-      } else if (!eligibleForGathering(currentOperator)) {
+      } else if (!otherGatheringFilled(g.key) && !eligibleForGathering(currentOperator)) {
         blocked = true;
-        blockedLabel = "Not yet";
+        blockedLabel = "Need 1 AM + 1 PM";
       }
       btn.className = "cell gather-cell" + (assigned ? " " + OPERATORS[assigned].cls + ownership : " empty" + (blocked ? " ineligible" : ""));
       btn.textContent = assigned ? OPERATORS[assigned].name : (blocked ? blockedLabel : "");
@@ -747,9 +848,45 @@
       btn.addEventListener("click", function () {
         if (assigned && assigned !== currentOperator) return;
         if (assigned === currentOperator) {
+          var wasManual = !workingState.gatheringsAuto[g.key];
           workingState.gatherings[g.key] = null;
-        } else if (!assigned && !hasGathering(currentOperator) && eligibleForGathering(currentOperator)) {
-          workingState.gatherings[g.key] = currentOperator;
+          workingState.gatheringsAuto[g.key] = false;
+          if (wasManual) {
+            // Unselecting your own, manually-picked gathering also clears
+            // the paired gathering that was auto-filled for the other
+            // operator. Cancelling an auto-filled gathering, on the other
+            // hand, only removes your own — it leaves the other
+            // operator's manual pick untouched.
+            var otherKeyClear = otherOp(currentOperator);
+            GATHERINGS.forEach(function (other) {
+              if (other.key !== g.key && workingState.gatherings[other.key] === otherKeyClear && workingState.gatheringsAuto[other.key]) {
+                workingState.gatherings[other.key] = null;
+                workingState.gatheringsAuto[other.key] = false;
+              }
+            });
+          }
+        } else if (!assigned && !hasGathering(currentOperator) && (otherGatheringFilled(g.key) || eligibleForGathering(currentOperator))) {
+          var otherKeyFill = otherOp(currentOperator);
+          if (otherGatheringFilled(g.key)) {
+            // The other gathering is already claimed by the other operator —
+            // you're just completing an existing pair, not starting a new
+            // one, so this is always allowed (regardless of your morning/
+            // evening slot counts) and doesn't lock your duty schedule.
+            workingState.gatherings[g.key] = currentOperator;
+            workingState.gatheringsAuto[g.key] = true;
+          } else {
+            // Starting a brand-new pairing: this pick is the manual one
+            // (locks your morning/evening) and auto-fills the remaining
+            // slot for the other operator.
+            workingState.gatherings[g.key] = currentOperator;
+            workingState.gatheringsAuto[g.key] = false;
+            GATHERINGS.forEach(function (other) {
+              if (other.key !== g.key && !workingState.gatherings[other.key]) {
+                workingState.gatherings[other.key] = otherKeyFill;
+                workingState.gatheringsAuto[other.key] = true;
+              }
+            });
+          }
         } else {
           return;
         }
@@ -763,13 +900,22 @@
     });
 
     var priorityEl = document.getElementById("gather-priority");
-    var tFrodhel = totalFor("frodhel");
-    var tFebe = totalFor("febe");
-    if (tFrodhel === tFebe) {
-      priorityEl.textContent = "Duty totals are tied (" + tFrodhel + " each) — either operator may pick.";
+    var c = countsFor(currentOperator);
+    var canCompleteOpenPair = GATHERINGS.some(function (g) {
+      return !workingState.gatherings[g.key] && otherGatheringFilled(g.key);
+    });
+    if (hasManualGathering(currentOperator)) {
+      priorityEl.textContent = gatheringLockMessage(currentOperator);
+    } else if (hasGathering(currentOperator)) {
+      priorityEl.textContent = "You were auto-assigned the other Pagkakatipon schedule. Your morning and evening schedules are not locked.";
+    } else if (eligibleForGathering(currentOperator)) {
+      priorityEl.textContent = "You are eligible to pick a Pagkakatipon schedule. Once selected, your morning and evening schedules will be locked until you unselect it.";
+    } else if (canCompleteOpenPair) {
+      priorityEl.textContent = "The other operator already picked a Pagkakatipon schedule — you can still claim the remaining one regardless of your morning/evening slot count.";
+    } else if (c.m > 2 && c.e > 2) {
+      priorityEl.textContent = "You have more than 2 morning and more than 2 evening schedules, so you cannot pick a Pagkakatipon schedule. The operator with fewer duty slots may pick it after the schedule is saved.";
     } else {
-      var leader = tFrodhel < tFebe ? "frodhel" : "febe";
-      priorityEl.textContent = OPERATORS[leader].name + " has fewer duty slots (" + Math.min(tFrodhel, tFebe) + " vs " + Math.max(tFrodhel, tFebe) + ") and gets first pick on gatherings.";
+      priorityEl.textContent = "You can pick Pagkakatipon after selecting at least 1 morning slot and 1 evening slot.";
     }
   }
 
@@ -778,9 +924,27 @@
       if (workingState.days[d.key].morning === currentOperator) workingState.days[d.key].morning = null;
       if (workingState.days[d.key].evening === currentOperator) workingState.days[d.key].evening = null;
     });
+    var otherKeyReset = otherOp(currentOperator);
+    var clearedManual = false;
     GATHERINGS.forEach(function (g) {
-      if (workingState.gatherings[g.key] === currentOperator) workingState.gatherings[g.key] = null;
+      if (workingState.gatherings[g.key] === currentOperator) {
+        if (!workingState.gatheringsAuto[g.key]) clearedManual = true;
+        workingState.gatherings[g.key] = null;
+        workingState.gatheringsAuto[g.key] = false;
+      }
     });
+    // If a manually-picked gathering was cleared, also clear the paired
+    // gathering that was auto-filled for the other operator — it can no
+    // longer stand on its own. Clearing an auto-filled gathering (your own)
+    // never touches the other operator's manual pick.
+    if (clearedManual) {
+      GATHERINGS.forEach(function (g) {
+        if (workingState.gatherings[g.key] === otherKeyReset && workingState.gatheringsAuto[g.key]) {
+          workingState.gatherings[g.key] = null;
+          workingState.gatheringsAuto[g.key] = false;
+        }
+      });
+    }
     setUnsaved(true);
     render();
   });
@@ -792,6 +956,23 @@
   });
 
   document.getElementById("save-btn").addEventListener("click", function () {
+    if (!scheduleRuleFor(currentOperator).valid) {
+      updateScheduleValidation();
+      return;
+    }
+
+    var dutyTotal = 0;
+    DAYS.forEach(function (d) {
+      if (workingState.days[d.key].morning) dutyTotal++;
+      if (workingState.days[d.key].evening) dutyTotal++;
+    });
+
+    if (dutyTotal === 0) {
+      workingState.firstOperator = null;
+    } else if (!workingState.firstOperator) {
+      workingState.firstOperator = currentOperator;
+    }
+
     savedState = deepCopy(workingState);
     stateEl.textContent = JSON.stringify(savedState);
     setUnsaved(false);
@@ -815,6 +996,7 @@
     document.getElementById("whoami-name").textContent = OPERATORS[opKey].name;
     document.getElementById("whoami-dot").style.background = opKey === "frodhel" ? "var(--gold)" : "var(--teal)";
     render();
+    updateScheduleValidation();
   }
 
   document.querySelectorAll(".op-choice").forEach(function (btn) {
