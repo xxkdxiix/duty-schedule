@@ -353,7 +353,7 @@
         <span class="chip"><span class="dot morning"></span>Morning · Mon–Fri · 6:00–9:00 AM</span>
         <span class="chip"><span class="dot evening"></span>Evening · Mon–Fri · 9:00 PM–12:00 AM</span>
       </div>
-      <p class="rule-note">First operator: up to 3 morning and 3 evening slots. The second operator may select all remaining open slots. If you select 3 morning slots, you must also select 3 evening slots before saving.</p>
+      <p class="rule-note">First operator: up to 3 morning and 3 evening slots. The second operator may select all remaining open slots. If you select 3 morning slots, you must also select at least 2 evening slots before saving (3 morning with 2 evening is allowed).</p>
     </header>
 
     <div class="board">
@@ -588,11 +588,12 @@
   function scheduleRuleFor(opKey) {
     var c = countsFor(opKey);
     // Additional rule: whenever an operator reaches 3 morning slots,
-    // they must also have exactly 3 evening slots before saving.
-    if (c.m === 3 && c.e < 3) {
+    // they must also have at least 2 evening slots before saving
+    // (3 morning + 2 evening is allowed).
+    if (c.m === 3 && c.e < 2) {
       return {
         valid: false,
-        message: "You selected 3 morning schedules. You must also select 3 evening schedules before you can save."
+        message: "You selected 3 morning schedules. You must also select at least 2 evening schedules before you can save."
       };
     }
     return { valid: true, message: "" };
